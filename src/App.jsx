@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Receipt, Package, Users, Printer, Wallet, Search, ArrowLeft, Plus, Edit3, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Receipt, Package, Users, Printer, Wallet, Search, ArrowLeft, Plus, Edit3, Trash2, History } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -19,13 +19,17 @@ export default function App() {
   const [isEditingMode, setIsEditingMode] = useState(false); 
   const [editingBillId, setEditingBillId] = useState(null);
 
-  // Edit User Account Fields (NEW 🚀)
+  // Billing Internal Search States (NEW 🚀)
+  const [billingCustomerSearch, setBillingCustomerSearch] = useState('');
+  const [profBillingSearch, setProfBillingSearch] = useState('');
+
+  // Edit User Account Fields
   const [isUserEditMode, setIsUserEditMode] = useState(false);
   const [editUserName, setEditUserName] = useState('');
   const [editUserPhone, setEditUserPhone] = useState('');
   const [editUserBalance, setEditUserBalance] = useState('');
 
-  // Edit Stock Item Fields (NEW 🚀)
+  // Edit Stock Item Fields
   const [editingStockId, setEditingStockId] = useState(null);
   const [editStockName, setEditStockName] = useState('');
   const [editStockQty, setEditStockQty] = useState('');
@@ -108,7 +112,6 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
-  // Trigger User Edit Fields Setup (NEW 🚀)
   const startUserEdit = () => {
     setIsUserEditMode(true);
     setEditUserName(selectedProfileUser.name);
@@ -116,7 +119,6 @@ export default function App() {
     setEditUserBalance(selectedProfileUser.balance);
   };
 
-  // Save User Fields to Database (NEW 🚀)
   const handleUpdateUserFields = async () => {
     const targetId = selectedProfileUser.id || selectedProfileUser._id;
     try {
@@ -135,7 +137,6 @@ export default function App() {
     } catch (err) { alert('Update error!'); }
   };
 
-  // Stock Edit Engine Save (NEW 🚀)
   const handleUpdateStockItem = async (productId) => {
     try {
       const res = await fetch(`${API_URL}/products/update/${productId}`, {
@@ -151,7 +152,6 @@ export default function App() {
     } catch (err) { }
   };
 
-  // Completely Remove Product Stock (NEW 🚀)
   const handleRemoveProductCompletely = async (productId) => {
     if (!confirm('Kya aap is sabji ko stock vault se poori tarah delete karna chahte hain?')) return;
     try {
@@ -301,6 +301,13 @@ export default function App() {
   const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredParties = parties.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  // Dynamic Serial-wise filter mapping for search selectors (NEW 🚀)
+  const billingSearchFilteredCustomers = customers.filter((c, idx) => {
+    const term = billingCustomerSearch.toLowerCase();
+    const serialNum = (idx + 1).toString();
+    return c.name.toLowerCase().includes(term) || serialNum === term;
+  });
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans text-gray-800">
       
@@ -383,7 +390,7 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* DYNAMIC USER EDIT BLOCK (NEW 🚀) */}
+                {/* USER EDIT BLOCK */}
                 <div className="bg-white p-6 rounded-2xl border flex flex-col md:flex-row justify-between gap-4">
                   {!isUserEditMode ? (
                     <div className="flex-1 flex justify-between items-center w-full">
@@ -413,7 +420,7 @@ export default function App() {
                         <input type="text" className="w-full p-2 border rounded bg-white text-xs font-bold" value={editUserPhone} onChange={e => setEditUserPhone(e.target.value)} />
                       </div>
                       <div>
-                        <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Adjust Opening/Current Balance (Rs.)</label>
+                        <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Adjust Balance (Rs.)</label>
                         <input type="number" className="w-full p-2 border rounded bg-white text-xs font-bold" value={editUserBalance} onChange={e => setEditUserBalance(e.target.value)} />
                       </div>
                       <div className="flex gap-2">
@@ -467,19 +474,21 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Profile timeline ledger */}
+                {/* Profile timeline ledger - SUPPLIER HISTORY WILL AUTOMATICALLY HIGHLIGHT STOCK RELEASES HERE 🥦 */}
                 <div className="bg-white p-4 rounded-2xl border">
                   <h3 className="font-bold text-gray-800 mb-2">Detailed Khata Ledger Record History</h3>
                   <table className="w-full text-left text-xs">
-                    <thead><tr className="bg-gray-50 font-bold"><th className="p-2">Date/Time</th><th className="p-2">Type</th><th className="p-2">Particulars</th><th className="p-2 text-right">Amount</th><th className="p-2">Status</th><th className="p-2 text-center">Action</th></tr></thead>
+                    <thead><tr className="bg-gray-50 font-bold"><th className="p-2">Date/Time</th><th className="p-2">Type</th><th className="p-2">Particulars</th><th className="p-2 text-right">Amount / Qty</th><th className="p-2">Status</th><th className="p-2 text-center">Action</th></tr></thead>
                     <tbody className="divide-y">
                       {userTimeline.map((item, idx) => (
                         <tr key={idx} className="hover:bg-gray-50 font-medium">
                           <td className="p-2">{new Date(item.date).toLocaleString()}</td>
-                          <td className="p-2 font-bold">{item.type}</td>
-                          <td className="p-2">{item.description}</td>
-                          <td className="p-2 text-right font-bold text-gray-900">Rs. {item.amount}</td>
-                          <td className="p-2">{item.cashImpact}</td>
+                          <td className="p-2 font-bold text-gray-950">{item.type}</td>
+                          <td className="p-2 text-blue-900">{item.description}</td>
+                          <td className="p-2 text-right font-black text-gray-900">
+                            {item.type.includes('Challan') || item.type.includes('Inward') ? item.amount + ' Units' : 'Rs. ' + item.amount}
+                          </td>
+                          <td className="p-2 text-gray-500">{item.cashImpact}</td>
                           <td className="p-2 text-center flex justify-center gap-1">
                             {item.isCustomerBill && <button onClick={() => startBillEdit(item.rawObj)} className="bg-orange-50 text-orange-600 p-1 rounded"><Edit3 size={12} /></button>}
                             <button onClick={() => { if(item.isCustomerBill) setLastGeneratedBill(item.rawObj); }} className="bg-blue-50 text-blue-600 p-1 rounded"><Printer size={12} /></button>
@@ -500,8 +509,8 @@ export default function App() {
 
                 {searchQuery && (
                   <div className="bg-white p-4 border rounded-xl shadow mb-6 space-y-1">
-                    {filteredCustomers.map(c => <div key={c.id || c._id} onClick={() => { loadUserProfile(c); setSearchQuery(''); }} className="p-2 hover:bg-green-5 cursor-pointer rounded flex justify-between"><span>{c.name} (Khareedar)</span><span className="font-bold text-red-600">Rs. {c.balance}</span></div>)}
-                    {filteredParties.map(p => <div key={p.id || p._id} onClick={() => { loadUserProfile(p); setSearchQuery(''); }} className="p-2 hover:bg-amber-50 cursor-pointer rounded flex justify-between"><span>{p.name} (Party)</span><span className="font-bold text-amber-600">Rs. {Math.abs(p.balance)}</span></div>)}
+                    {filteredCustomers.map((c, i) => <div key={c.id || c._id} onClick={() => { loadUserProfile(c); setSearchQuery(''); }} className="p-2 hover:bg-green-5 cursor-pointer rounded flex justify-between"><span>Serial {i+1}. <strong>{c.name}</strong> (Khareedar)</span><span className="font-bold text-red-600">Rs. {c.balance}</span></div>)}
+                    {filteredParties.map((p, i) => <div key={p.id || p._id} onClick={() => { loadUserProfile(p); setSearchQuery(''); }} className="p-2 hover:bg-amber-50 cursor-pointer rounded flex justify-between"><span>Serial {i+1}. <strong>{p.name}</strong> (Party)</span><span className="font-bold text-amber-600">Rs. {Math.abs(p.balance)}</span></div>)}
                   </div>
                 )}
 
@@ -541,18 +550,42 @@ export default function App() {
                   </div>
                 )}
 
-                {/* GLOBAL INVOICE GENERATOR */}
+                {/* GLOBAL INVOICE GENERATOR WITH INTERNAL FILTER ENGINE (NEW 🚀) */}
                 {activeTab === 'global-billing-tab' && (
                   <div className="bg-white p-6 rounded-xl border shadow max-w-3xl mx-auto">
-                    <h3 className="text-lg font-bold mb-4 border-b pb-2">🧾 Mandi Vyapaar Fast Invoice Generator</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                      <div>
-                        <label className="block text-sm font-bold mb-1">Grahak Chunein</label>
-                        <select className="w-full p-2 border rounded-lg text-sm bg-gray-50 font-bold" value={globalBillCustomer} onChange={(e) => setGlobalBillCustomer(e.target.value)}>
-                          <option value="">-- Customer Name --</option>
-                          {customers.map(c => <option key={c.id || c._id} value={c.id || c._id}>{c.name} (Purana Baaki: Rs.{c.balance})</option>)}
-                        </select>
+                    <h3 className="text-lg font-bold mb-4 border-b pb-2 text-green-800">🧾 Mandi Vyapaar Fast Invoice Generator</h3>
+                    
+                    <div className="bg-gray-50 p-3 rounded-lg border mb-4 space-y-2">
+                      <label className="block text-xs font-bold text-gray-600 uppercase">1. Search Grahak (Type Serial Number ya Naam)</label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Example: '1' for first customer or type name..." 
+                          className="flex-1 p-2 border rounded-lg text-sm bg-white font-bold" 
+                          value={billingCustomerSearch} 
+                          onChange={(e) => setBillingCustomerSearch(e.target.value)} 
+                        />
+                        {billingCustomerSearch && <button onClick={() => setBillingCustomerSearch('')} className="text-xs text-red-500 font-bold bg-white px-2 border rounded-lg">Clear</button>}
                       </div>
+
+                      <select 
+                        className="w-full p-2 border rounded-lg text-sm bg-white font-extrabold text-blue-900" 
+                        value={globalBillCustomer} 
+                        onChange={(e) => setGlobalBillCustomer(e.target.value)}
+                      >
+                        <option value="">-- Click here to select from matches ({billingSearchFilteredCustomers.length}) --</option>
+                        {billingSearchFilteredCustomers.map((c) => {
+                          const originalIndex = customers.findIndex(cust => cust.id === c.id || cust._id === c._id) + 1;
+                          return (
+                            <option key={c.id || c._id} value={c.id || c._id}>
+                              Serial {originalIndex}. {c.name} (Outstanding: Rs.{c.balance})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                       <div>
                         <label className="block text-sm font-bold mb-1">Mandi Commission Cash Add</label>
                         <input type="number" className="w-full p-2 border rounded-lg bg-yellow-50 font-bold" value={globalCommCash} onChange={(e) => setGlobalCommCash(e.target.value)} />
@@ -564,7 +597,7 @@ export default function App() {
                     </div>
                     {globalBillItems.map((item, idx) => (
                       <div key={idx} className="flex gap-2 mb-2 items-center">
-                        <select className="flex-1 p-2 border rounded text-sm" value={item.productId} onChange={(e) => { const n=[...globalBillItems]; n[idx].productId=e.target.value; const m=stock.find(s=>(s.id || s._id)===e.target.value); if(m)n[idx].rate=m.sellingPrice; setGlobalBillItems(n); }}><option value="">-- Select Sabji --</option>{stock.map(s => <option key={s.id || s._id} value={s.id || s._id}>{s.name} ({s.stock} available)</option>)}</select>
+                        <select className="flex-1 p-2 border rounded text-sm" value={item.productId} onChange={(e) => { const n=[...globalBillItems]; n[idx].productId=e.target.value; const m=stock.find(s=>(s.id || s._id)===e.target.value); if(m)n[idx].rate=m.sellingPrice; setGlobalBillItems(n); }}><option value="">-- Select Sabji --</option>{stock.map(s => <option key={s.id || s._id} value={s.id || s._id}>{s.name} ({s.stock} left)</option>)}</select>
                         <input type="text" placeholder="Wazan split" className="w-36 p-2 border rounded text-sm font-bold" value={item.weightInput} onChange={(e) => { const n = [...globalBillItems]; n[idx].weightInput = e.target.value; setGlobalBillItems(n); }} />
                         <input type="number" placeholder="Rate" className="w-20 p-2 border rounded text-sm bg-yellow-50 font-bold" value={item.rate} onChange={(e) => { const n = [...globalBillItems]; n[idx].rate = e.target.value; setGlobalBillItems(n); }} />
                       </div>
@@ -621,7 +654,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* LIVE STOCK VAULT WITH EDIT-DELETE MECHANICAL FOR WASTAGE (NEW 🚀) */}
+                {/* LIVE STOCK VAULT WITH COMPREHENSIVE SUPPLIER TRACING HISTORY (NEW 🚀) */}
                 {activeTab === 'stock' && (
                   <div className="space-y-4">
                     <form onSubmit={handleMasterAddStock} className="bg-white p-4 rounded-xl border grid grid-cols-1 md:grid-cols-7 gap-2 items-end">
@@ -635,14 +668,15 @@ export default function App() {
                     </form>
 
                     <div className="bg-white p-4 rounded-xl border overflow-hidden">
+                      <div className="flex items-center gap-2 mb-3 text-green-900 font-bold"><History size={16} /> Current Vault & Supplier Origin Tracking</div>
                       <table className="w-full text-left text-xs">
                         <thead>
                           <tr className="bg-gray-100 font-bold border-b text-gray-600">
                             <th className="p-3">Sabji Item</th>
-                            <th className="p-3">Kisaan/Supplier Name</th>
+                            <th className="p-3">Current Supplier Origin</th>
                             <th className="p-3">Live Stock Vault</th>
-                            <th className="p-3">Khareed Bhav</th>
-                            <th className="p-3">Selling Rate</th>
+                            <th className="p-3">Last Unload Cost</th>
+                            <th className="p-3">Current Selling Rate</th>
                             <th className="p-3 text-center">Manage / Wastage</th>
                           </tr>
                         </thead>
@@ -652,9 +686,9 @@ export default function App() {
                               {editingStockId !== (s.id || s._id) ? (
                                 <>
                                   <td className="p-3 font-bold uppercase text-gray-950">{s.name}</td>
-                                  <td className="p-3 text-amber-800 font-bold">{s.supplierName || 'N/A'}</td>
+                                  <td className="p-3 text-amber-800 font-extrabold bg-amber-50/50">{s.supplierName || 'N/A'}</td>
                                   <td className="p-3 text-blue-600 font-black">{s.stock} {s.unitType}</td>
-                                  <td className="p-3">Rs. {s.purchasePrice}/{s.unitType}</td>
+                                  <td className="p-3 text-gray-600">Rs. {s.purchasePrice}/{s.unitType}</td>
                                   <td className="p-3 font-black text-green-700">Rs. {s.sellingPrice}/{s.unitType}</td>
                                   <td className="p-3 flex justify-center gap-2 items-center">
                                     <button onClick={() => { setEditingStockId(s.id || s._id); setEditStockName(s.name); setEditStockQty(s.stock); setEditStockPurchasePrice(s.purchasePrice); setEditStockSellingPrice(s.sellingPrice); }} className="bg-orange-50 text-orange-600 p-1.5 rounded hover:bg-orange-600 hover:text-white transition"><Edit3 size={12} /></button>
@@ -664,8 +698,8 @@ export default function App() {
                               ) : (
                                 <>
                                   <td className="p-2"><input type="text" className="w-20 p-1 border rounded text-[11px] font-bold" value={editStockName} onChange={e => setEditStockName(e.target.value)} /></td>
-                                  <td className="p-2 text-gray-400 text-[10px]">Tag: {s.supplierName}</td>
-                                  <td className="p-2"><input type="number" className="w-16 p-1 border rounded text-[11px] font-bold bg-blue-50 text-blue-700" value={editStockQty} onChange={e => setEditStockQty(e.target.value)} placeholder="Qty left" /></td>
+                                  <td className="p-2 text-gray-400 text-[10px]">Orig: {s.supplierName}</td>
+                                  <td className="p-2"><input type="number" className="w-16 p-1 border rounded text-[11px] font-bold bg-blue-50 text-blue-700" value={editStockQty} onChange={e => setEditStockQty(e.target.value)} /></td>
                                   <td className="p-2"><input type="number" className="w-16 p-1 border rounded text-[11px]" value={editStockPurchasePrice} onChange={e => setEditStockPurchasePrice(e.target.value)} /></td>
                                   <td className="p-2"><input type="number" className="w-16 p-1 border rounded text-[11px] text-green-700 font-bold" value={editStockSellingPrice} onChange={e => setEditStockSellingPrice(e.target.value)} /></td>
                                   <td className="p-2 flex gap-1 justify-center">
