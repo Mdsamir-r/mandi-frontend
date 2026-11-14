@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Receipt, Package, Users, Printer, Wallet, 
   Search, ArrowLeft, Plus, Edit3, Trash2, History, Calendar, 
   CheckCircle2, ArrowUpRight, ArrowDownLeft, Zap, Lock, LogOut, 
-  Loader2, X, Sparkles, TrendingUp, DollarSign
+  Loader2, X, Sparkles, TrendingUp, DollarSign, UserPlus
 } from 'lucide-react';
 
 export default function App() {
@@ -105,6 +105,12 @@ export default function App() {
   const [profDepositMode, setProfDepositMode] = useState('Offline (Cash)');
   const [profDepositDate, setProfDepositDate] = useState(getLocalDateTime);
 
+  // Master Forms (Customer / Supplier add)
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserPhone, setNewUserPhone] = useState('');
+  const [newUserRole, setNewUserRole] = useState('customer');
+  const [newUserBalance, setNewUserBalance] = useState('');
+
   // Overlays / Receipts
   const [lastGeneratedBill, setLastGeneratedBill] = useState(null);
   const [lastDepositSlip, setLastDepositSlip] = useState(null); 
@@ -153,6 +159,61 @@ export default function App() {
   const parseMultiBoraWeight = (inputString) => {
     if (!inputString) return 0;
     return inputString.split(',').map(val => parseFloat(val.trim())).filter(val => !isNaN(val)).reduce((sum, current) => sum + current, 0);
+  };
+
+  // Add User (Customer ya Party)
+  const handleMasterAddUser = async (e, roleType = 'customer') => {
+    e.preventDefault();
+    if (!newUserName.trim()) return alert('Kripya naam likhein!');
+    try {
+      const res = await fetch(API_URL + '/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newUserName,
+          phone: newUserPhone || 'N/A',
+          role: roleType,
+          initialBalance: Number(newUserBalance) || 0
+        })
+      });
+      if (res.ok) {
+        alert(roleType === 'customer' ? 'Naya Grahak Khata Khol Diya Gaya!' : 'Naya Supplier Khata Khol Diya Gaya!');
+        setNewUserName('');
+        setNewUserPhone('');
+        setNewUserBalance('');
+        await fetchData();
+      } else {
+        const d = await res.json();
+        alert(d.error || 'Khata banane me error');
+      }
+    } catch (err) {
+      alert('Network issue while creating user');
+    }
+  };
+
+  // Delete User with PIN
+  const handleDeleteUser = async (userId, userName) => {
+    const pin = prompt(`⚠️ WARNING: "${userName}" ka khata delete karne ke liye 4-digit PIN enter karein:`);
+    if (pin === null) return;
+    if (pin !== APP_PIN) return alert('Galat PIN! Delete cancel ho gaya.');
+
+    try {
+      const res = await fetch(`${API_URL}/users/delete/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secretCode: pin })
+      });
+      if (res.ok) {
+        alert('Khata poori tarah uda diya gaya!');
+        setSelectedProfileUser(null);
+        await fetchData();
+      } else {
+        const d = await res.json();
+        alert(d.error || 'Delete fail ho gaya');
+      }
+    } catch (err) {
+      alert('Network issue while deleting');
+    }
   };
 
   // Bill Submit
@@ -254,7 +315,7 @@ export default function App() {
     }
   };
 
-  // ================= 3. TRANSACTION RECORD EDIT (100% WORKING) =================
+  // Edit Transaction Record
   const openEditHistoryModal = (item) => {
     setEditingHistoryItem(item);
     setEditHistoryAmount(item.amount);
@@ -272,8 +333,6 @@ export default function App() {
     try {
       setIsUpdatingHistory(true);
       const isDeposit = editingHistoryItem.isDeposit;
-      
-      // Target ID fallback to ensure both MongoDB _id and string id work
       const targetId = editingHistoryItem.rawObj?._id || editingHistoryItem.rawObj?.id || editingHistoryItem.id;
       const endpoint = isDeposit ? `${API_URL}/deposits/${targetId}` : `${API_URL}/bills/${targetId}`;
 
@@ -483,9 +542,19 @@ export default function App() {
         {/* ================= USER PROFILE VIEW ================= */}
         {selectedProfileUser && (
           <div className="space-y-6 animate-fadeIn">
-            <button onClick={() => setSelectedProfileUser(null)} className="flex items-center gap-2 bg-slate-800 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-700 transition">
-              <ArrowLeft size={14} /> Back to Directory
-            </button>
+            <div className="flex justify-between items-center">
+              <button onClick={() => setSelectedProfileUser(null)} className="flex items-center gap-2 bg-slate-800 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-700 transition">
+                <ArrowLeft size={14} /> Back to Directory
+              </button>
+
+              {/* DELETE KHATA BUTTON (WITH PIN) */}
+              <button 
+                onClick={() => handleDeleteUser((selectedProfileUser.id || selectedProfileUser._id), selectedProfileUser.name)}
+                className="flex items-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm"
+              >
+                <Trash2 size={14} /> Delete Account 🔒
+              </button>
+            </div>
 
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-md flex justify-between items-center">
               <div>
@@ -494,7 +563,6 @@ export default function App() {
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-black uppercase text-slate-400">Total Udhaar Balance</span>
-                {/* Balance displayed in White */}
                 <p className="text-3xl font-black text-white mt-0.5">Rs. {selectedProfileUser.balance}</p>
               </div>
             </div>
@@ -894,9 +962,51 @@ export default function App() {
           </div>
         )}
 
-        {/* ================= CUSTOMERS LEDGER TAB ================= */}
+        {/* ================= CUSTOMERS LEDGER TAB (ADD CUSTOMER RESTORED) ================= */}
         {activeTab === 'customers' && !selectedProfileUser && (
-          <div className="space-y-4 animate-fadeIn">
+          <div className="space-y-6 animate-fadeIn">
+            {/* 1. NAYA GRAHAK ADD FORM */}
+            <form onSubmit={(e) => handleMasterAddUser(e, 'customer')} className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-md grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+              <div>
+                <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Grahak Naam *</label>
+                <input 
+                  type="text" 
+                  placeholder="Full Name" 
+                  className="w-full p-3 border border-slate-700 rounded-2xl bg-slate-800 text-white font-bold text-xs focus:border-emerald-500 focus:outline-none" 
+                  value={newUserName} 
+                  onChange={(e) => setNewUserName(e.target.value)} 
+                  required 
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Phone Number</label>
+                <input 
+                  type="text" 
+                  placeholder="Mobile No" 
+                  className="w-full p-3 border border-slate-700 rounded-2xl bg-slate-800 text-white font-bold text-xs focus:border-emerald-500 focus:outline-none" 
+                  value={newUserPhone} 
+                  onChange={(e) => setNewUserPhone(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Opening Udhaar (Rs.)</label>
+                <input 
+                  type="number" 
+                  placeholder="0" 
+                  className="w-full p-3 border border-slate-700 rounded-2xl bg-slate-800 text-white font-bold text-xs focus:border-emerald-500 focus:outline-none" 
+                  value={newUserBalance} 
+                  onChange={(e) => setNewUserBalance(e.target.value)} 
+                />
+              </div>
+              <button 
+                type="submit" 
+                className="bg-emerald-600 hover:bg-emerald-500 text-white p-3.5 rounded-2xl font-bold text-xs shadow-lg transition flex items-center justify-center gap-1.5"
+              >
+                <UserPlus size={16} /> Open New Khata
+              </button>
+            </form>
+
+            {/* 2. SEARCH BAR */}
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-sm flex items-center gap-3">
               <Search className="text-slate-400" size={18} />
               <input 
@@ -908,6 +1018,7 @@ export default function App() {
               />
             </div>
 
+            {/* 3. CUSTOMER CARDS GRID */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {customers.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map((c, i) => (
                 <div 
@@ -920,7 +1031,7 @@ export default function App() {
                     <p className="font-black text-sm uppercase text-white">{c.name}</p>
                     <p className="text-[11px] text-slate-400 font-semibold">{c.phone}</p>
                   </div>
-                  <p className="text-sm font-black text-rose-400">Rs. {c.balance}</p>
+                  <p className="text-sm font-black text-white">Rs. {c.balance}</p>
                 </div>
               ))}
             </div>
@@ -929,7 +1040,48 @@ export default function App() {
 
         {/* ================= SUPPLIER KHATA TAB ================= */}
         {activeTab === 'parties' && !selectedProfileUser && (
-          <div className="space-y-4 animate-fadeIn">
+          <div className="space-y-6 animate-fadeIn">
+            {/* Supplier Add Form */}
+            <form onSubmit={(e) => handleMasterAddUser(e, 'party')} className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-md grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+              <div>
+                <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Supplier Naam *</label>
+                <input 
+                  type="text" 
+                  placeholder="Kisaan Name" 
+                  className="w-full p-3 border border-slate-700 rounded-2xl bg-slate-800 text-white font-bold text-xs focus:border-amber-500 focus:outline-none" 
+                  value={newUserName} 
+                  onChange={(e) => setNewUserName(e.target.value)} 
+                  required 
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Phone Number</label>
+                <input 
+                  type="text" 
+                  placeholder="Mobile" 
+                  className="w-full p-3 border border-slate-700 rounded-2xl bg-slate-800 text-white font-bold text-xs focus:border-amber-500 focus:outline-none" 
+                  value={newUserPhone} 
+                  onChange={(e) => setNewUserPhone(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Purana Owed (- Rs.)</label>
+                <input 
+                  type="number" 
+                  placeholder="0" 
+                  className="w-full p-3 border border-slate-700 rounded-2xl bg-slate-800 text-white font-bold text-xs focus:border-amber-500 focus:outline-none" 
+                  value={newUserBalance} 
+                  onChange={(e) => setNewUserBalance(e.target.value)} 
+                />
+              </div>
+              <button 
+                type="submit" 
+                className="bg-amber-600 hover:bg-amber-500 text-white p-3.5 rounded-2xl font-bold text-xs shadow-lg transition flex items-center justify-center gap-1.5"
+              >
+                <Plus size={16} /> Add Party Supplier
+              </button>
+            </form>
+
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-sm flex items-center gap-3">
               <Search className="text-slate-400" size={18} />
               <input 
