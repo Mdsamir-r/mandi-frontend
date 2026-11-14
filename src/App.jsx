@@ -7,19 +7,12 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // Helper: Generates local datetime string (YYYY-MM-DDTHH:mm) without UTC shift
   const getLocalDateTime = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
-    const year = d.getFullYear();
-    const month = pad(d.getMonth() + 1);
-    const day = pad(d.getDate());
-    const hours = pad(d.getHours());
-    const minutes = pad(d.getMinutes());
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  // Helper: Strictly displays timestamp in Indian Standard Time (IST)
   const formatToIndianTime = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('en-IN', {
@@ -34,7 +27,13 @@ export default function App() {
     });
   };
 
-  // ================= 1. SECURITY PIN AUTH =================
+  const toISTString = (dateStr) => {
+    if (!dateStr) return new Date().toISOString();
+    if (dateStr.includes('+') || dateStr.includes('Z')) return dateStr;
+    return dateStr.length === 16 ? `${dateStr}:00+05:30` : `${dateStr}+05:30`;
+  };
+
+  // ================= 1. SECURITY PIN =================
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('mandi_auth') === 'true';
   });
@@ -59,7 +58,7 @@ export default function App() {
     localStorage.removeItem('mandi_auth');
   };
 
-  // ================= 2. CORE APP STATES =================
+  // ================= 2. MAIN STATES =================
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboardData, setDashboardData] = useState({
     totalSales: 0, totalProfit: 0, totalCashReceived: 0, totalCustomerUdhaar: 0, totalPartyDena: 0,
@@ -69,19 +68,16 @@ export default function App() {
   const [customers, setCustomers] = useState([]);
   const [parties, setParties] = useState([]);
   const [stock, setStock] = useState([]);
-  const [globalInwardHistory, setGlobalInwardHistory] = useState([]); 
 
-  // Multi-Click Debounce States
   const [isSubmittingBill, setIsSubmittingBill] = useState(false);
   const [isSubmittingDeposit, setIsSubmittingDeposit] = useState(false);
 
-  // Search & Profile Views
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProfileUser, setSelectedProfileUser] = useState(null); 
   const [userTimeline, setUserTimeline] = useState([]); 
   const [billingCustomerSearch, setBillingCustomerSearch] = useState('');
 
-  // History Transaction Editing (1400 -> 1450 Mistake Fix)
+  // History Transaction Editing State
   const [editingHistoryItem, setEditingHistoryItem] = useState(null);
   const [editHistoryAmount, setEditHistoryAmount] = useState('');
   const [editHistoryDate, setEditHistoryDate] = useState('');
@@ -97,19 +93,19 @@ export default function App() {
   const [globalPaidAmount, setGlobalPaidAmount] = useState('');
   const [globalPayMode, setGlobalPayMode] = useState('Offline (Cash)');
 
-  // Dedicated Cash Deposit Desk Form
+  // Deposit Desk
   const [depositTargetUser, setDepositTargetUser] = useState('');
   const [depositSearchFilter, setDepositSearchFilter] = useState('');
   const [depositAmountInput, setDepositAmountInput] = useState('');
   const [depositModeInput, setDepositModeInput] = useState('Offline (Cash)'); 
   const [depositDate, setDepositDate] = useState(getLocalDateTime);
 
-  // In-Profile Deposit States
+  // In-Profile Deposit
   const [profDepositAmount, setProfDepositAmount] = useState('');
   const [profDepositMode, setProfDepositMode] = useState('Offline (Cash)');
   const [profDepositDate, setProfDepositDate] = useState(getLocalDateTime);
 
-  // Overlays
+  // Overlays / Receipts
   const [lastGeneratedBill, setLastGeneratedBill] = useState(null);
   const [lastDepositSlip, setLastDepositSlip] = useState(null); 
 
@@ -159,10 +155,9 @@ export default function App() {
     return inputString.split(',').map(val => parseFloat(val.trim())).filter(val => !isNaN(val)).reduce((sum, current) => sum + current, 0);
   };
 
-  // ================= 3. MULTI-TAP PROTECTED BILL SUBMIT =================
+  // Bill Submit
   const handleCreateBillSubmission = async (targetCustomerId) => {
     if (isSubmittingBill) return;
-
     const customerId = targetCustomerId || globalBillCustomer;
     if (!customerId) return alert('Kripya Grahak select karein!');
 
@@ -174,16 +169,12 @@ export default function App() {
     };
 
     if (billingMode === 'direct') {
-      if (!directBillAmount || Number(directBillAmount) <= 0) {
-        return alert('Direct Bill Amount daalein (jaise: 2000)!');
-      }
+      if (!directBillAmount || Number(directBillAmount) <= 0) return alert('Direct Bill Amount daalein (jaise: 2000)!');
       payload.directAmount = Number(directBillAmount);
       payload.note = directBillNote || 'Direct Lump-sum Bill';
       payload.items = [];
     } else {
-      if (!globalBillItems[0]?.productId) {
-        return alert('Kam se kam ek Sabji item chunein!');
-      }
+      if (!globalBillItems[0]?.productId) return alert('Kam se kam ek Sabji item chunein!');
       payload.items = globalBillItems.map(item => ({
         productId: item.productId,
         weight: parseMultiBoraWeight(item.weightInput),
@@ -210,16 +201,16 @@ export default function App() {
         await fetchData();
         if (selectedProfileUser) loadUserProfile(selectedProfileUser);
       } else {
-        alert(data.error || 'Bill save karne me samasya aayi!');
+        alert(data.error || 'Bill save nahi ho paya!');
       }
     } catch (err) {
-      alert('Network Error! Kripya connection check karein.');
+      alert('Network Error!');
     } finally {
       setIsSubmittingBill(false);
     }
   };
 
-  // ================= 4. MULTI-TAP PROTECTED DEPOSIT SUBMIT =================
+  // Deposit Submit
   const handleDepositSubmit = async (e, customUserId = null, customAmount = null, customDate = null, customMode = null) => {
     if (e) e.preventDefault();
     if (isSubmittingDeposit) return;
@@ -241,7 +232,7 @@ export default function App() {
           amount: Number(finalAmount), 
           type: 'jama', 
           paymentMode: finalMode,
-          date: finalDate
+          date: toISTString(finalDate)
         }) 
       });
       const data = await res.json();
@@ -263,19 +254,14 @@ export default function App() {
     }
   };
 
-  // ================= 5. EDIT TRANSACTION RECORD =================
+  // ================= 3. TRANSACTION RECORD EDIT (100% WORKING) =================
   const openEditHistoryModal = (item) => {
     setEditingHistoryItem(item);
     setEditHistoryAmount(item.amount);
     if (item.date) {
       const d = new Date(item.date);
       const pad = (n) => String(n).padStart(2, '0');
-      const year = d.getFullYear();
-      const month = pad(d.getMonth() + 1);
-      const day = pad(d.getDate());
-      const hours = pad(d.getHours());
-      const minutes = pad(d.getMinutes());
-      setEditHistoryDate(`${year}-${month}-${day}T${hours}:${minutes}`);
+      setEditHistoryDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
     } else {
       setEditHistoryDate('');
     }
@@ -286,7 +272,9 @@ export default function App() {
     try {
       setIsUpdatingHistory(true);
       const isDeposit = editingHistoryItem.isDeposit;
-      const targetId = editingHistoryItem.rawObj?._id || editingHistoryItem.id;
+      
+      // Target ID fallback to ensure both MongoDB _id and string id work
+      const targetId = editingHistoryItem.rawObj?._id || editingHistoryItem.rawObj?.id || editingHistoryItem.id;
       const endpoint = isDeposit ? `${API_URL}/deposits/${targetId}` : `${API_URL}/bills/${targetId}`;
 
       const res = await fetch(endpoint, {
@@ -295,19 +283,19 @@ export default function App() {
         body: JSON.stringify({
           amount: Number(editHistoryAmount),
           directAmount: Number(editHistoryAmount),
-          date: editHistoryDate,
+          date: toISTString(editHistoryDate),
           items: editingHistoryItem.rawObj?.items || []
         })
       });
 
+      const data = await res.json();
       if (res.ok) {
-        alert('Transaction aur Khata safaltapoorvak update ho gaya!');
+        alert('Record aur Khata dono safaltapoorvak update ho gaye!');
         setEditingHistoryItem(null);
         await fetchData();
         if (selectedProfileUser) loadUserProfile(selectedProfileUser);
       } else {
-        const d = await res.json();
-        alert(d.error || 'Update fail ho gaya!');
+        alert(data.error || 'Update fail ho gaya! Server ne reject kiya.');
       }
     } catch (err) {
       alert('Network issue during update');
@@ -316,7 +304,6 @@ export default function App() {
     }
   };
 
-  // ================= PIN LOCK SCREEN =================
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
@@ -363,7 +350,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col lg:flex-row font-sans text-slate-100">
       
-      {/* SIDEBAR NAVIGATION */}
+      {/* SIDEBAR */}
       <aside className="w-full lg:w-64 bg-slate-950/70 backdrop-blur-xl border-r border-slate-800/80 flex flex-col p-5 shadow-2xl shrink-0 print:hidden">
         <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-6">
           <div>
@@ -399,7 +386,7 @@ export default function App() {
       {/* MAIN VIEW */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden bg-gradient-to-b from-slate-900 to-slate-950">
         
-        {/* PARCHA PREVIEW OVERLAY */}
+        {/* PARCHA BILL RECEIPT */}
         {lastGeneratedBill && (
           <div className="bg-slate-900 border border-slate-700 p-6 rounded-3xl shadow-2xl max-w-md mx-auto mb-6 animate-fadeIn">
             <div className="text-center border-b border-slate-800 pb-3 mb-4">
@@ -423,6 +410,28 @@ export default function App() {
             <div className="mt-5 flex gap-2">
               <button onClick={() => window.print()} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl font-bold text-xs shadow-md">Print Parcha</button>
               <button onClick={() => setLastGeneratedBill(null)} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl font-bold text-xs">Close</button>
+            </div>
+          </div>
+        )}
+
+        {/* CASH DEPOSIT RECEIPT SLIP */}
+        {lastDepositSlip && (
+          <div className="bg-slate-900 border-2 border-emerald-500/50 p-6 rounded-3xl shadow-2xl max-w-sm mx-auto mb-6 animate-fadeIn">
+            <div className="text-center border-b border-slate-800 pb-3 mb-3">
+              <h2 className="text-lg font-black uppercase text-emerald-400">Samim And Sons</h2>
+              <p className="text-[10px] text-slate-400 font-bold">Cash Galla Deposit Slip</p>
+            </div>
+            <div className="space-y-2 text-xs font-semibold text-slate-300">
+              <p><strong>Naam:</strong> {lastDepositSlip.userName}</p>
+              <p><strong>Channel:</strong> {lastDepositSlip.paymentMode}</p>
+              <p className="text-base font-black text-emerald-400 bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-500/30">
+                Jama Rakam: Rs. {lastDepositSlip.amount}
+              </p>
+              <p className="text-slate-400">Closing Balance: <strong className="text-white">Rs. {lastDepositSlip.newBalance}</strong></p>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => window.print()} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-xl font-bold text-xs">Print Slip</button>
+              <button onClick={() => setLastDepositSlip(null)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl font-bold text-xs">Close</button>
             </div>
           </div>
         )}
@@ -485,11 +494,12 @@ export default function App() {
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-black uppercase text-slate-400">Total Udhaar Balance</span>
-                <p className="text-3xl font-black text-rose-400 mt-0.5">Rs. {selectedProfileUser.balance}</p>
+                {/* Balance displayed in White */}
+                <p className="text-3xl font-black text-white mt-0.5">Rs. {selectedProfileUser.balance}</p>
               </div>
             </div>
 
-            {/* Profile Action Grid: Quick Cash Entry Desk */}
+            {/* Quick Cash Entry Desk */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
               <h3 className="font-black text-sm uppercase text-emerald-400 flex items-center gap-2">
                 <Wallet size={16} /> Quick Jama Deposit (Kal ya Purani Date Support)
@@ -518,41 +528,72 @@ export default function App() {
               </div>
             </div>
 
-            {/* Khata Ledger Table with Indian Time Display */}
+            {/* Khata Ledger Table with Dynamic Color Palette and Print */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-sm">
               <h3 className="font-black text-sm text-white mb-4 uppercase flex items-center gap-2">
                 <History size={16} className="text-emerald-400" /> Khata Transaction History
               </h3>
               <div className="overflow-x-auto rounded-2xl border border-slate-800">
-                <table className="w-full text-left text-xs min-w-[550px]">
+                <table className="w-full text-left text-xs min-w-[600px]">
                   <thead>
                     <tr className="bg-slate-800/60 border-b border-slate-800 font-bold text-slate-400">
                       <th className="p-3.5">Date (IST)</th>
                       <th className="p-3.5">Vivaran</th>
                       <th className="p-3.5 text-right">Rakam</th>
                       <th className="p-3.5 text-right">Balance</th>
+                      <th className="p-3.5 text-center">Print</th>
                       <th className="p-3.5 text-center">Sudhar (Edit)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {userTimeline.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/40 transition">
-                        <td className="p-3.5 text-slate-400 font-medium">{formatToIndianTime(item.date)}</td>
-                        <td className="p-3.5 font-bold text-white">{item.description}</td>
-                        <td className="p-3.5 text-right font-black text-emerald-400">Rs. {item.amount}</td>
-                        <td className="p-3.5 text-right font-black text-rose-400">Rs. {item.finalBalance}</td>
-                        <td className="p-3.5 text-center">
-                          <button 
-                            onClick={() => openEditHistoryModal(item)}
-                            className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-xl font-bold text-[10px] flex items-center gap-1 mx-auto transition"
-                          >
-                            <Edit3 size={11} /> Edit
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {userTimeline.map((item, idx) => {
+                      const isCash = item.isDeposit || item.type.includes('Cash');
+                      return (
+                        <tr key={idx} className="hover:bg-slate-800/40 transition">
+                          <td className="p-3.5 text-slate-400 font-medium">{formatToIndianTime(item.date)}</td>
+                          <td className="p-3.5 font-bold text-white">{item.description}</td>
+                          
+                          {/* Rakam: Green for Cash Deposit, Red for Bill */}
+                          <td className="p-3.5 text-right font-black">
+                            <span className={`inline-flex items-center gap-1 ${isCash ? 'text-emerald-400' : 'text-rose-500'}`}>
+                              {isCash ? <ArrowDownLeft size={13}/> : <ArrowUpRight size={13}/>}
+                              Rs. {item.amount}
+                            </span>
+                          </td>
+
+                          {/* Balance in Pure White */}
+                          <td className="p-3.5 text-right font-black text-white">
+                            Rs. {item.finalBalance}
+                          </td>
+
+                          {/* Print Action */}
+                          <td className="p-3.5 text-center">
+                            {item.isCustomerBill && (
+                              <button onClick={() => setLastGeneratedBill(item.rawObj)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition">
+                                <Printer size={13} />
+                              </button>
+                            )}
+                            {item.isDeposit && (
+                              <button onClick={() => setLastDepositSlip(item.rawObj)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition">
+                                <Printer size={13} />
+                              </button>
+                            )}
+                          </td>
+
+                          {/* Edit Action */}
+                          <td className="p-3.5 text-center">
+                            <button 
+                              onClick={() => openEditHistoryModal(item)}
+                              className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-xl font-bold text-[10px] flex items-center gap-1 mx-auto transition"
+                            >
+                              <Edit3 size={11} /> Edit
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {userTimeline.length === 0 && (
-                      <tr><td colSpan="5" className="p-6 text-center text-slate-500 font-bold">Koi record register nahi mila.</td></tr>
+                      <tr><td colSpan="6" className="p-6 text-center text-slate-500 font-bold">Koi record register nahi mila.</td></tr>
                     )}
                   </tbody>
                 </table>
