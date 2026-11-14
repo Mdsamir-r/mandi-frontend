@@ -3,15 +3,35 @@ import {
   LayoutDashboard, Receipt, Package, Users, Printer, Wallet, 
   Search, ArrowLeft, Plus, Edit3, Trash2, History, Calendar, 
   CheckCircle2, ArrowUpRight, ArrowDownLeft, Zap, Lock, LogOut, 
-  Loader2, X, AlertCircle, Sparkles, TrendingUp, DollarSign
+  Loader2, X, Sparkles, TrendingUp, DollarSign
 } from 'lucide-react';
 
 export default function App() {
-  // Helper for current date-time string
+  // Helper: Generates local datetime string (YYYY-MM-DDTHH:mm) without UTC shift
   const getLocalDateTime = () => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    return now.toISOString().slice(0, 16);
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hours = pad(d.getHours());
+    const minutes = pad(d.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  // Helper: Strictly displays timestamp in Indian Standard Time (IST)
+  const formatToIndianTime = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
   };
 
   // ================= 1. SECURITY PIN AUTH =================
@@ -67,18 +87,6 @@ export default function App() {
   const [editHistoryDate, setEditHistoryDate] = useState('');
   const [isUpdatingHistory, setIsUpdatingHistory] = useState(false);
 
-  // User & Stock Edit States
-  const [isUserEditMode, setIsUserEditMode] = useState(false);
-  const [editUserName, setEditUserName] = useState('');
-  const [editUserPhone, setEditUserPhone] = useState('');
-  const [editUserBalance, setEditUserBalance] = useState('');
-
-  const [editingStockId, setEditingStockId] = useState(null);
-  const [editStockName, setEditStockName] = useState('');
-  const [editStockQty, setEditStockQty] = useState('');
-  const [editStockPurchasePrice, setEditStockPurchasePrice] = useState('');
-  const [editStockSellingPrice, setEditStockSellingPrice] = useState('');
-
   // Billing States
   const [billingMode, setBillingMode] = useState('itemized');
   const [directBillAmount, setDirectBillAmount] = useState('');
@@ -89,7 +97,7 @@ export default function App() {
   const [globalPaidAmount, setGlobalPaidAmount] = useState('');
   const [globalPayMode, setGlobalPayMode] = useState('Offline (Cash)');
 
-  // Dedicated Cash Deposit Desk Form (With Backdated Option)
+  // Dedicated Cash Deposit Desk Form
   const [depositTargetUser, setDepositTargetUser] = useState('');
   const [depositSearchFilter, setDepositSearchFilter] = useState('');
   const [depositAmountInput, setDepositAmountInput] = useState('');
@@ -104,19 +112,6 @@ export default function App() {
   // Overlays
   const [lastGeneratedBill, setLastGeneratedBill] = useState(null);
   const [lastDepositSlip, setLastDepositSlip] = useState(null); 
-
-  // Master Forms
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserPhone, setNewUserPhone] = useState('');
-  const [newUserRole, setNewUserRole] = useState('customer');
-  const [newUserBalance, setNewUserBalance] = useState('');
-
-  const [newProdName, setNewProdName] = useState('');
-  const [newProdStock, setNewProdStock] = useState('');
-  const [newProdPrice, setNewProdPrice] = useState('');
-  const [newProdSellingPrice, setNewProdSellingPrice] = useState('');
-  const [newProdUnit, setNewProdUnit] = useState('Kg');
-  const [newProdSupplier, setNewProdSupplier] = useState('');
 
   const API_URL = 'https://mandi-backend-wk26.onrender.com/api';
 
@@ -151,7 +146,6 @@ export default function App() {
   const loadUserProfile = async (user) => {
     const targetId = user.id || user._id;
     setSelectedProfileUser(user);
-    setIsUserEditMode(false);
     try {
       const res = await fetch(`${API_URL}/users/${targetId}/timeline`);
       if (res.ok) setUserTimeline(await res.json());
@@ -225,7 +219,7 @@ export default function App() {
     }
   };
 
-  // ================= 4. MULTI-TAP PROTECTED DEPOSIT SUBMIT (WITH CUSTOM DATE) =================
+  // ================= 4. MULTI-TAP PROTECTED DEPOSIT SUBMIT =================
   const handleDepositSubmit = async (e, customUserId = null, customAmount = null, customDate = null, customMode = null) => {
     if (e) e.preventDefault();
     if (isSubmittingDeposit) return;
@@ -269,11 +263,22 @@ export default function App() {
     }
   };
 
-  // ================= 5. EDIT TRANSACTION RECORD (1400 -> 1450 FIX) =================
+  // ================= 5. EDIT TRANSACTION RECORD =================
   const openEditHistoryModal = (item) => {
     setEditingHistoryItem(item);
     setEditHistoryAmount(item.amount);
-    setEditHistoryDate(item.date ? new Date(item.date).toISOString().slice(0, 16) : '');
+    if (item.date) {
+      const d = new Date(item.date);
+      const pad = (n) => String(n).padStart(2, '0');
+      const year = d.getFullYear();
+      const month = pad(d.getMonth() + 1);
+      const day = pad(d.getDate());
+      const hours = pad(d.getHours());
+      const minutes = pad(d.getMinutes());
+      setEditHistoryDate(`${year}-${month}-${day}T${hours}:${minutes}`);
+    } else {
+      setEditHistoryDate('');
+    }
   };
 
   const handleSaveHistoryUpdate = async () => {
@@ -311,26 +316,6 @@ export default function App() {
     }
   };
 
-  // Master Handlers
-  const handleMasterAddUser = async (e) => {
-    e.preventDefault();
-    if (!newUserName.trim()) return;
-    try {
-      const res = await fetch(API_URL + '/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newUserName, phone: newUserPhone || 'N/A', role: newUserRole, initialBalance: Number(newUserBalance) || 0 })
-      });
-      if (res.ok) { 
-        alert('Naya khata khul gaya!'); 
-        setNewUserName(''); 
-        setNewUserPhone(''); 
-        setNewUserBalance(''); 
-        await fetchData(); 
-      }
-    } catch (err) { }
-  };
-
   // ================= PIN LOCK SCREEN =================
   if (!isAuthenticated) {
     return (
@@ -355,7 +340,7 @@ export default function App() {
             {authError && <p className="text-xs font-bold text-rose-500">{authError}</p>}
             <button 
               type="submit" 
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-emerald-900/30 transition active:scale-95 text-sm"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-2xl shadow-lg transition active:scale-95 text-sm"
             >
               Unlock Counter Desk
             </button>
@@ -442,7 +427,7 @@ export default function App() {
           </div>
         )}
 
-        {/* EDIT RECORD MODAL (1400 -> 1450 FIX) */}
+        {/* EDIT RECORD MODAL */}
         {editingHistoryItem && (
           <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
             <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4">
@@ -533,7 +518,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Khata Ledger Table with Edit Action */}
+            {/* Khata Ledger Table with Indian Time Display */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-sm">
               <h3 className="font-black text-sm text-white mb-4 uppercase flex items-center gap-2">
                 <History size={16} className="text-emerald-400" /> Khata Transaction History
@@ -542,7 +527,7 @@ export default function App() {
                 <table className="w-full text-left text-xs min-w-[550px]">
                   <thead>
                     <tr className="bg-slate-800/60 border-b border-slate-800 font-bold text-slate-400">
-                      <th className="p-3.5">Date</th>
+                      <th className="p-3.5">Date (IST)</th>
                       <th className="p-3.5">Vivaran</th>
                       <th className="p-3.5 text-right">Rakam</th>
                       <th className="p-3.5 text-right">Balance</th>
@@ -552,7 +537,7 @@ export default function App() {
                   <tbody className="divide-y divide-slate-800">
                     {userTimeline.map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-800/40 transition">
-                        <td className="p-3.5 text-slate-400">{new Date(item.date).toLocaleString()}</td>
+                        <td className="p-3.5 text-slate-400 font-medium">{formatToIndianTime(item.date)}</td>
                         <td className="p-3.5 font-bold text-white">{item.description}</td>
                         <td className="p-3.5 text-right font-black text-emerald-400">Rs. {item.amount}</td>
                         <td className="p-3.5 text-right font-black text-rose-400">Rs. {item.finalBalance}</td>
@@ -617,7 +602,6 @@ export default function App() {
               />
             </div>
 
-            {/* Custom Backdated Date Selection Field */}
             <div>
               <label className="block text-[11px] font-black uppercase text-slate-400 mb-1.5">
                 Deposit Date & Time (Kal ki date ke liye yahan badlein)
@@ -818,7 +802,6 @@ export default function App() {
         {/* ================= DASHBOARD TILES ================= */}
         {activeTab === 'dashboard' && !selectedProfileUser && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Top Revenue Stat Card */}
             <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 border border-emerald-500/20 p-6 sm:p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden">
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -851,7 +834,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Udhaar & Dena Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-slate-900 border border-rose-500/20 p-6 rounded-3xl shadow-sm">
                 <div className="flex justify-between items-center">
@@ -859,7 +841,6 @@ export default function App() {
                   <span className="p-2 bg-rose-500/10 text-rose-400 rounded-xl"><DollarSign size={16}/></span>
                 </div>
                 <p className="text-3xl font-black text-rose-400 mt-2">Rs. {dashboardData.totalCustomerUdhaar}</p>
-                <p className="text-[11px] text-slate-500 mt-1">Pending payments across all grahak accounts</p>
               </div>
               <div className="bg-slate-900 border border-amber-500/20 p-6 rounded-3xl shadow-sm">
                 <div className="flex justify-between items-center">
@@ -867,7 +848,6 @@ export default function App() {
                   <span className="p-2 bg-amber-500/10 text-amber-400 rounded-xl"><DollarSign size={16}/></span>
                 </div>
                 <p className="text-3xl font-black text-amber-400 mt-2">Rs. {dashboardData.totalPartyDena}</p>
-                <p className="text-[11px] text-slate-500 mt-1">Net payable to mandi kisaan & suppliers</p>
               </div>
             </div>
           </div>
