@@ -3,10 +3,16 @@ import {
   LayoutDashboard, Receipt, Package, Users, Printer, Wallet, 
   Search, ArrowLeft, Plus, Edit3, Trash2, History, Calendar, 
   CheckCircle2, ArrowUpRight, ArrowDownLeft, Zap, Lock, LogOut, 
-  Loader2, X, Sparkles, TrendingUp, DollarSign, UserPlus
+  Loader2, X, Sparkles, TrendingUp, DollarSign, UserPlus, Filter
 } from 'lucide-react';
 
 export default function App() {
+  const getTodayDateOnly = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
   const getLocalDateTime = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -83,6 +89,13 @@ export default function App() {
   const [editHistoryDate, setEditHistoryDate] = useState('');
   const [isUpdatingHistory, setIsUpdatingHistory] = useState(false);
 
+  // Deep History Modal (Date Adjustable Sales & Collection)
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyModalType, setHistoryModalType] = useState('sales'); // 'sales' or 'galla'
+  const [historyFilterDate, setHistoryFilterDate] = useState(getTodayDateOnly());
+  const [rawBillsList, setRawBillsList] = useState([]);
+  const [rawDepositsList, setRawDepositsList] = useState([]);
+
   // Billing States
   const [billingMode, setBillingMode] = useState('itemized');
   const [directBillAmount, setDirectBillAmount] = useState('');
@@ -95,6 +108,7 @@ export default function App() {
 
   // Deposit Desk
   const [depositTargetUser, setDepositTargetUser] = useState('');
+  const [depositSelectedUserName, setDepositSelectedUserName] = useState('');
   const [depositSearchFilter, setDepositSearchFilter] = useState('');
   const [depositAmountInput, setDepositAmountInput] = useState('');
   const [depositModeInput, setDepositModeInput] = useState('Offline (Cash)'); 
@@ -105,10 +119,9 @@ export default function App() {
   const [profDepositMode, setProfDepositMode] = useState('Offline (Cash)');
   const [profDepositDate, setProfDepositDate] = useState(getLocalDateTime);
 
-  // Master Forms (Customer / Supplier add)
+  // Master Forms
   const [newUserName, setNewUserName] = useState('');
   const [newUserPhone, setNewUserPhone] = useState('');
-  const [newUserRole, setNewUserRole] = useState('customer');
   const [newUserBalance, setNewUserBalance] = useState('');
 
   // Overlays / Receipts
@@ -161,7 +174,23 @@ export default function App() {
     return inputString.split(',').map(val => parseFloat(val.trim())).filter(val => !isNaN(val)).reduce((sum, current) => sum + current, 0);
   };
 
-  // Add User (Customer ya Party)
+  // Trigger Dynamic Date Breakdown Modal (Bikri ya Galla)
+  const openHistoryModal = async (type) => {
+    setHistoryModalType(type);
+    setShowHistoryModal(true);
+    try {
+      const res = await fetch(`${API_URL}/dashboard/deep-history`);
+      if (res.ok) {
+        const data = await res.json();
+        setRawBillsList(data.allBills || []);
+        setRawDepositsList(data.allDeposits || []);
+      }
+    } catch (err) {
+      console.error("Deep History Fetch Error: ", err);
+    }
+  };
+
+  // Add User
   const handleMasterAddUser = async (e, roleType = 'customer') => {
     e.preventDefault();
     if (!newUserName.trim()) return alert('Kripya naam likhein!');
@@ -301,6 +330,8 @@ export default function App() {
         setLastDepositSlip(data.deposit); 
         setDepositAmountInput(''); 
         setDepositTargetUser('');
+        setDepositSelectedUserName('');
+        setDepositSearchFilter('');
         setDepositDate(getLocalDateTime());
         setProfDepositAmount('');
         await fetchData(); 
@@ -396,6 +427,7 @@ export default function App() {
     );
   }
 
+  // Filtered lists
   const billingSearchFilteredCustomers = customers.filter((c, idx) => {
     const term = billingCustomerSearch.toLowerCase();
     const serialNum = (idx + 1).toString();
@@ -403,8 +435,24 @@ export default function App() {
   });
 
   const depositSearchFilteredUsers = [...customers, ...parties].filter((u) => {
+    if (!depositSearchFilter.trim()) return false;
     return u.name.toLowerCase().includes(depositSearchFilter.toLowerCase());
   });
+
+  // Date Filtered Calculations for Modal
+  const filteredDateBills = rawBillsList.filter(b => {
+    const bDate = new Date(b.date).toLocaleDateString('en-CA');
+    return bDate === historyFilterDate;
+  });
+
+  const filteredDateDeposits = rawDepositsList.filter(d => {
+    const dDate = new Date(d.date).toLocaleDateString('en-CA');
+    return dDate === historyFilterDate && d.type === 'jama';
+  });
+
+  const filteredDateSalesTotal = filteredDateBills.reduce((sum, b) => sum + (b.billAmount || 0), 0);
+  const filteredDateGallaTotal = filteredDateDeposits.reduce((sum, d) => sum + (d.amount || 0), 0) + 
+    filteredDateBills.reduce((sum, b) => sum + (b.paidAmount || 0), 0);
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col lg:flex-row font-sans text-slate-100">
@@ -495,6 +543,96 @@ export default function App() {
           </div>
         )}
 
+        {/* ================= DYNAMIC DATE BREAKDOWN MODAL (FOR SALES & GALLA) ================= */}
+        {showHistoryModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="font-black text-base text-white uppercase flex items-center gap-2">
+                    {historyModalType === 'sales' ? <Receipt className="text-emerald-400" size={18} /> : <Wallet className="text-yellow-400" size={18} />}
+                    {historyModalType === 'sales' ? 'Bikri (Sales) Details Breakdown' : 'Galla Collection Details Breakdown'}
+                  </h3>
+                  <p className="text-xs text-slate-400">Select date to see history and clients</p>
+                </div>
+                <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg">
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Date Filter Control */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700">
+                <div className="flex items-center gap-2">
+                  <Calendar size={16} className="text-emerald-400" />
+                  <span className="text-xs font-bold text-slate-300">Target Date:</span>
+                  <input 
+                    type="date" 
+                    value={historyFilterDate}
+                    onChange={(e) => setHistoryFilterDate(e.target.value)}
+                    className="p-2 border border-slate-600 rounded-xl bg-slate-900 text-white text-xs font-black focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="text-right w-full sm:w-auto">
+                  <span className="text-[10px] uppercase font-black text-slate-400 block">Total on this date</span>
+                  <span className={`text-xl font-black ${historyModalType === 'sales' ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                    Rs. {historyModalType === 'sales' ? filteredDateSalesTotal : filteredDateGallaTotal}
+                  </span>
+                </div>
+              </div>
+
+              {/* Details List */}
+              <div className="overflow-y-auto max-h-80 rounded-2xl border border-slate-800 divide-y divide-slate-800">
+                {historyModalType === 'sales' ? (
+                  <>
+                    {filteredDateBills.map((b, i) => (
+                      <div key={i} className="p-3.5 flex justify-between items-center hover:bg-slate-800/40 transition">
+                        <div>
+                          <p className="font-bold text-sm text-white uppercase">{b.customerName}</p>
+                          <p className="text-[11px] text-slate-400">
+                            {formatToIndianTime(b.date)} | {b.items?.map(it => it.productName).join(', ') || 'Direct Bill'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-black text-sm text-emerald-400">Rs. {b.billAmount}</p>
+                          <p className="text-[10px] text-slate-400">Adv: Rs. {b.paidAmount}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {filteredDateBills.length === 0 && (
+                      <p className="p-8 text-center text-slate-500 font-bold text-xs">Is date ko koi bill generate nahi hua tha.</p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {/* Deposits + Counter Advance Payments */}
+                    {filteredDateDeposits.map((d, i) => (
+                      <div key={i} className="p-3.5 flex justify-between items-center hover:bg-slate-800/40 transition">
+                        <div>
+                          <p className="font-bold text-sm text-white uppercase">{d.userName} <span className="text-[10px] bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 px-1.5 py-0.5 rounded font-black ml-1.5">Galla Entry</span></p>
+                          <p className="text-[11px] text-slate-400">{formatToIndianTime(d.date)} | Mode: {d.paymentMode}</p>
+                        </div>
+                        <p className="font-black text-sm text-yellow-300">Rs. {d.amount}</p>
+                      </div>
+                    ))}
+                    {filteredDateBills.filter(b => b.paidAmount > 0).map((b, i) => (
+                      <div key={'b-' + i} className="p-3.5 flex justify-between items-center hover:bg-slate-800/40 transition">
+                        <div>
+                          <p className="font-bold text-sm text-white uppercase">{b.customerName} <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-black ml-1.5">Counter Bill Cash</span></p>
+                          <p className="text-[11px] text-slate-400">{formatToIndianTime(b.date)} | Mode: {b.paymentMode}</p>
+                        </div>
+                        <p className="font-black text-sm text-emerald-400">Rs. {b.paidAmount}</p>
+                      </div>
+                    ))}
+                    {filteredDateDeposits.length === 0 && filteredDateBills.filter(b => b.paidAmount > 0).length === 0 && (
+                      <p className="p-8 text-center text-slate-500 font-bold text-xs">Is date ko koi galla collection jama nahi hua.</p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* EDIT RECORD MODAL */}
         {editingHistoryItem && (
           <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
@@ -547,7 +685,6 @@ export default function App() {
                 <ArrowLeft size={14} /> Back to Directory
               </button>
 
-              {/* DELETE KHATA BUTTON (WITH PIN) */}
               <button 
                 onClick={() => handleDeleteUser((selectedProfileUser.id || selectedProfileUser._id), selectedProfileUser.name)}
                 className="flex items-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm"
@@ -621,7 +758,6 @@ export default function App() {
                           <td className="p-3.5 text-slate-400 font-medium">{formatToIndianTime(item.date)}</td>
                           <td className="p-3.5 font-bold text-white">{item.description}</td>
                           
-                          {/* Rakam: Green for Cash Deposit, Red for Bill */}
                           <td className="p-3.5 text-right font-black">
                             <span className={`inline-flex items-center gap-1 ${isCash ? 'text-emerald-400' : 'text-rose-500'}`}>
                               {isCash ? <ArrowDownLeft size={13}/> : <ArrowUpRight size={13}/>}
@@ -629,12 +765,10 @@ export default function App() {
                             </span>
                           </td>
 
-                          {/* Balance in Pure White */}
                           <td className="p-3.5 text-right font-black text-white">
                             Rs. {item.finalBalance}
                           </td>
 
-                          {/* Print Action */}
                           <td className="p-3.5 text-center">
                             {item.isCustomerBill && (
                               <button onClick={() => setLastGeneratedBill(item.rawObj)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition">
@@ -648,7 +782,6 @@ export default function App() {
                             )}
                           </td>
 
-                          {/* Edit Action */}
                           <td className="p-3.5 text-center">
                             <button 
                               onClick={() => openEditHistoryModal(item)}
@@ -670,34 +803,62 @@ export default function App() {
           </div>
         )}
 
-        {/* ================= DEDICATED CASH DEPOSIT TAB ================= */}
+        {/* ================= DEDICATED CASH DEPOSIT TAB (NO DROPDOWN TEMPLATE, AUTO-SUGGESTION CARDS) ================= */}
         {activeTab === 'deposit-tab' && !selectedProfileUser && (
           <div className="bg-slate-900 border border-slate-800 p-6 sm:p-8 rounded-3xl shadow-xl max-w-xl mx-auto space-y-5 animate-fadeIn">
             <h3 className="text-lg font-black uppercase text-emerald-400 border-b border-slate-800 pb-3 flex items-center gap-2">
               <Wallet size={20} /> Galla Cash Deposit Desk
             </h3>
 
-            <div>
-              <label className="block text-[11px] font-black uppercase text-slate-400 mb-1.5">Search Customer / Supplier</label>
+            {/* Direct Instant Search & Selection (No Template Dropdown) */}
+            <div className="relative">
+              <label className="block text-[11px] font-black uppercase text-slate-400 mb-1.5">
+                Search Customer / Supplier (Type to select directly)
+              </label>
               <input 
                 type="text" 
-                placeholder="Type name to filter..." 
-                value={depositSearchFilter}
-                onChange={(e) => setDepositSearchFilter(e.target.value)}
-                className="w-full p-3 border border-slate-700 rounded-2xl font-bold text-xs bg-slate-800 text-white mb-2 focus:border-emerald-500 focus:outline-none"
+                placeholder="Type client name (e.g. 'D')..." 
+                value={depositSelectedUserName ? depositSelectedUserName : depositSearchFilter}
+                onChange={(e) => {
+                  setDepositSearchFilter(e.target.value);
+                  setDepositSelectedUserName('');
+                  setDepositTargetUser('');
+                }}
+                className="w-full p-3 border border-slate-700 rounded-2xl font-bold text-xs bg-slate-800 text-white focus:border-emerald-500 focus:outline-none"
               />
-              <select 
-                value={depositTargetUser} 
-                onChange={(e) => setDepositTargetUser(e.target.value)}
-                className="w-full p-3 border border-slate-700 rounded-2xl font-black text-xs bg-slate-800 text-emerald-300 focus:border-emerald-500 focus:outline-none"
-              >
-                <option value="">-- Choose Account ({depositSearchFilteredUsers.length} found) --</option>
-                {depositSearchFilteredUsers.map(u => (
-                  <option key={u.id || u._id} value={u.id || u._id}>
-                    {u.name} ({u.role === 'customer' ? 'Grahak' : 'Supplier'} | Udhaar: Rs. {u.balance})
-                  </option>
-                ))}
-              </select>
+
+              {/* Direct Name Suggestion Floating List */}
+              {depositSearchFilter.trim() && !depositTargetUser && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-slate-950 border border-slate-700 rounded-2xl shadow-2xl p-2 max-h-56 overflow-y-auto z-40 space-y-1">
+                  {depositSearchFilteredUsers.map(u => (
+                    <div 
+                      key={u.id || u._id}
+                      onClick={() => {
+                        setDepositTargetUser(u.id || u._id);
+                        setDepositSelectedUserName(u.name);
+                        setDepositSearchFilter('');
+                      }}
+                      className="p-2.5 hover:bg-slate-800/80 rounded-xl cursor-pointer flex justify-between items-center transition border border-transparent hover:border-slate-700"
+                    >
+                      <div>
+                        <strong className="text-white text-xs uppercase">{u.name}</strong>
+                        <span className="text-[10px] text-slate-400 ml-2">({u.role === 'customer' ? 'Grahak' : 'Supplier'})</span>
+                      </div>
+                      <span className="text-xs font-black text-rose-400">Rs. {u.balance}</span>
+                    </div>
+                  ))}
+                  {depositSearchFilteredUsers.length === 0 && (
+                    <p className="p-3 text-center text-xs text-slate-500">Koi naam match nahi hua.</p>
+                  )}
+                </div>
+              )}
+
+              {depositSelectedUserName && (
+                <div className="mt-2 p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex justify-between items-center text-xs">
+                  <span className="text-emerald-400 font-bold">Selected: <strong>{depositSelectedUserName}</strong></span>
+                  <button onClick={() => { setDepositTargetUser(''); setDepositSelectedUserName(''); }} className="text-rose-400 font-bold">Change</button>
+                </div>
+              )}
             </div>
 
             <div>
@@ -908,7 +1069,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ================= DASHBOARD TILES ================= */}
+        {/* ================= DASHBOARD TILES (CLICKABLE WITH DATE-WISE DRILL DOWN) ================= */}
         {activeTab === 'dashboard' && !selectedProfileUser && (
           <div className="space-y-6 animate-fadeIn">
             <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 border border-emerald-500/20 p-6 sm:p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden">
@@ -917,25 +1078,39 @@ export default function App() {
                   <h3 className="text-xs font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2">
                     <TrendingUp size={16} /> Aaj Ka Live Vyapaar Counter
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Real-time settlement overview</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Click any tile to see full customer list & date history</p>
                 </div>
                 <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-[10px] font-black">
                   LIVE
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="bg-slate-800/40 border border-slate-700/60 p-4 rounded-2xl backdrop-blur-sm">
-                  <p className="text-[10px] text-slate-400 uppercase font-black">Today Bikri</p>
+                
+                {/* 1. TODAY BIKRI (CLICKABLE) */}
+                <div 
+                  onClick={() => openHistoryModal('sales')}
+                  className="bg-slate-800/40 border border-slate-700/60 p-4 rounded-2xl backdrop-blur-sm cursor-pointer hover:bg-slate-800/80 hover:border-emerald-500/50 transition shadow-sm group"
+                >
+                  <p className="text-[10px] text-slate-400 uppercase font-black group-hover:text-emerald-400 transition">👉 Today Bikri (Tap)</p>
                   <p className="text-xl sm:text-2xl font-black mt-1 text-white">Rs. {dashboardData.todaySales}</p>
                 </div>
+
+                {/* 2. TODAY PROFIT */}
                 <div className="bg-slate-800/40 border border-slate-700/60 p-4 rounded-2xl backdrop-blur-sm">
                   <p className="text-[10px] text-slate-400 uppercase font-black">Today Profit</p>
                   <p className="text-xl sm:text-2xl font-black mt-1 text-emerald-400">Rs. {dashboardData.todayProfit}</p>
                 </div>
-                <div className="bg-slate-800/40 border border-slate-700/60 p-4 rounded-2xl backdrop-blur-sm">
-                  <p className="text-[10px] text-slate-400 uppercase font-black">Galla Collection</p>
+
+                {/* 3. GALLA COLLECTION (CLICKABLE) */}
+                <div 
+                  onClick={() => openHistoryModal('galla')}
+                  className="bg-slate-800/40 border border-slate-700/60 p-4 rounded-2xl backdrop-blur-sm cursor-pointer hover:bg-slate-800/80 hover:border-yellow-500/50 transition shadow-sm group"
+                >
+                  <p className="text-[10px] text-slate-400 uppercase font-black group-hover:text-yellow-300 transition">👉 Galla Collection (Tap)</p>
                   <p className="text-xl sm:text-2xl font-black mt-1 text-yellow-300">Rs. {dashboardData.todayCashReceived}</p>
                 </div>
+
+                {/* 4. WEIGHT SOLD */}
                 <div className="bg-slate-800/40 border border-slate-700/60 p-4 rounded-2xl backdrop-blur-sm">
                   <p className="text-[10px] text-slate-400 uppercase font-black">Weight Sold</p>
                   <p className="text-xl sm:text-2xl font-black mt-1 text-white">{dashboardData.todayWeightSold} Units</p>
@@ -962,10 +1137,10 @@ export default function App() {
           </div>
         )}
 
-        {/* ================= CUSTOMERS LEDGER TAB (ADD CUSTOMER RESTORED) ================= */}
+        {/* ================= CUSTOMERS LEDGER TAB ================= */}
         {activeTab === 'customers' && !selectedProfileUser && (
           <div className="space-y-6 animate-fadeIn">
-            {/* 1. NAYA GRAHAK ADD FORM */}
+            {/* Add Customer Form */}
             <form onSubmit={(e) => handleMasterAddUser(e, 'customer')} className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-md grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
               <div>
                 <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Grahak Naam *</label>
@@ -1006,7 +1181,6 @@ export default function App() {
               </button>
             </form>
 
-            {/* 2. SEARCH BAR */}
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-sm flex items-center gap-3">
               <Search className="text-slate-400" size={18} />
               <input 
@@ -1018,7 +1192,6 @@ export default function App() {
               />
             </div>
 
-            {/* 3. CUSTOMER CARDS GRID */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {customers.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map((c, i) => (
                 <div 
@@ -1041,7 +1214,6 @@ export default function App() {
         {/* ================= SUPPLIER KHATA TAB ================= */}
         {activeTab === 'parties' && !selectedProfileUser && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Supplier Add Form */}
             <form onSubmit={(e) => handleMasterAddUser(e, 'party')} className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-md grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
               <div>
                 <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Supplier Naam *</label>
